@@ -2,6 +2,22 @@
 
 > A GraphQL breaking-change gate that downgrades severity using real field-usage telemetry, so the gate stays worth reading.
 
+## Live deployment
+
+[![CI and deployment](https://github.com/SlateGitOrg/schemadrift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SlateGitOrg/schemadrift/actions/workflows/ci.yml)
+
+[Open the interactive Schema Drift demo](https://slategitorg.github.io/schemadrift/)
+
+The deployed interface uses a deterministic offline scenario to make the repository's tested decision rule visible without external services or private data.
+
+### Desktop
+
+![Schema Drift desktop deployment](docs/assets/deployed-desktop.png)
+
+### Mobile
+
+<img src="docs/assets/deployed-mobile.png" alt="Schema Drift mobile deployment" width="390">
+
 `COMPACT` · **Full Stack Engineering** · Intermediate · ~4-5 days · API platform teams
 
 **Primary language:** TypeScript
