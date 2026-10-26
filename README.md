@@ -1,138 +1,116 @@
 # schemadrift
 
-> A GraphQL breaking-change gate that downgrades severity using real field-usage telemetry, so the gate stays worth reading.
+A GraphQL breaking-change gate that downgrades severity using real field-usage telemetry, so the gate stays worth reading.
 
-## Live deployment
+[![CI and Pages](https://github.com/SlateGitOrg/schemadrift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SlateGitOrg/schemadrift/actions/workflows/ci.yml)
+[Live demo](https://slategitorg.github.io/schemadrift/)
 
-[![CI and deployment](https://github.com/SlateGitOrg/schemadrift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SlateGitOrg/schemadrift/actions/workflows/ci.yml)
+![schemadrift web app, desktop](docs/assets/deployed-desktop.png)
 
-[Open the working Schema Drift application](https://slategitorg.github.io/schemadrift/)
+## Why
 
-This deployed application runs the project's decision workflow in the browser. Change the inputs, run the analysis, and inspect the computed metrics and decision trace.
+Schema checks flag every removed field as breaking. Teams then either block harmless deletions for months or learn to click through the warning, at which point the gate has stopped working while still appearing in every CI run.
 
-### Desktop
+schemadrift classifies each change against field-usage telemetry over a rolling window. Removing a deprecated field with zero requests in 30 days is SAFE. Removing a field that a client still calls is BREAKING, and the report names that client.
 
-![Schema Drift desktop deployment](docs/assets/deployed-desktop.png)
+## Features
 
-### Mobile
+- Structural diff of two SDL documents into a typed change list (removed or retyped fields, nullability changes, added arguments, new required input fields, added and removed types).
+- Usage ingestion: records of `{ field, client, at }` reduced to the callers seen per field inside a configurable window.
+- Narrow downgrade rule: only removals of deprecated fields with zero callers become SAFE.
+- Every downgrade is recorded on the finding (`downgradedFrom`, `justification`) and shown in the report.
+- Markdown report suitable for a pull request comment, plus an overall verdict (worst severity).
+- Browser app in `site/` running the same logic, deployed to GitHub Pages.
 
-<img src="docs/assets/deployed-mobile.png" alt="Schema Drift mobile deployment" width="390">
+## Architecture
 
-`COMPACT` · **Full Stack Engineering** · Intermediate · ~4-5 days · API platform teams
-
-**Primary language:** TypeScript
-**Tags:** `graphql`, `ci`, `developer-tooling`, `cli`, `contracts`
-
----
-
-## The problem
-
-Schema checks flag every removed field as breaking. Teams then either block harmless deletions for months or learn to click through the warning - at which point the gate has stopped working entirely, while still appearing in every CI run as reassuring green-and-red noise.
-
-## ⭐ The differentiator
-
-Each change is classified against **actual field-usage telemetry over a rolling window**: removing a deprecated field with zero requests in 30 days is SAFE; removing a field one client still calls is BREAKING, **with that client named**. A generic diff tool treats the schema as the only input and therefore produces an alert stream whose signal-to-noise ratio guarantees it will be ignored.
-
-This is the sentence to lead with when someone asks you to walk through the
-project. Everything else in this repo exists to make it true and to prove it.
-
-## Data
-
-GraphQL SDL pairs from public schemas (GitHub's published schema, Shopify's public SDL) as diff fixtures, plus a synthetic usage-log generator with documented client/field access patterns so severity-downgrade behaviour is verifiable.
-
-> No paid API key is required to run or demo this project. Where a paid
-> service would add value it is wired as an optional enhancement behind an
-> interface with an offline mock as the default implementation.
-
-## Stack
-
-- TypeScript, graphql-js for AST-level diffing
-- Node CLI + a GitHub Action wrapper
-- Vitest with golden-file fixtures
-
-## Core capabilities
-
-- Structural diff producing a typed change list with rule-based severity
-- Usage-log ingestion with per-field, per-client access windows
-- Severity downgrade with the justification recorded in the output, not applied silently
-- GitHub Action mode posting an annotated PR comment
-- JSON and human-readable reporters
-
-## Repository layout
-
-```
-src/diff/
-src/usage/
-src/report/
-fixtures/                 # schema pairs + usage logs
-test/
+```mermaid
+flowchart LR
+  OLD["old SDL"] --> P["parseSchema<br/>(SDL subset)"]
+  NEW["new SDL"] --> P
+  P --> D["structuralDiff<br/>rule-based severity"]
+  LOG["usage records<br/>(field, client, time)"] --> W["buildWindow<br/>rolling N days"]
+  D --> A["applyUsage<br/>narrow downgrade rule"]
+  W --> A
+  A --> R["renderReport<br/>PR comment"]
+  A --> G["worstSeverity<br/>gate verdict"]
 ```
 
-## Build plan
+Two small modules do the work. `src/diff.ts` parses SDL and produces base severities; `src/usage.ts` applies usage evidence and renders the result. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the decisions behind them.
 
-1. AST diff with severity rules first; get the golden files stable.
-2. Add usage ingestion and the downgrade path, with the reason always recorded.
-3. Wrap as a GitHub Action and post a real PR comment - that comment is your recruiter artefact.
+## Quick start
 
-## Testing strategy
-
-Golden-file diffs across 30 schema-pair fixtures. The behavioural test that matters: assert a field's severity **changes correctly as its usage window empties**, and that a field with a single remaining caller is never downgraded.
-
-Tests assert **correctness**, not merely that the code runs. A green suite on
-this repo is a claim about behaviour under adversarial conditions; treat any
-test that would pass against a deliberately broken implementation as a bug in
-the test.
-
-## Measurable outcome
-
-> Deprecated-field removals that used to sit blocked for a quarter now merge the day their usage hits zero, while genuinely breaking changes name the client that will break.
-
-State it in these terms — business units, not technical ones — in your CV
-bullet and in the first thirty seconds of describing the project.
-
-## Interview questions this project answers
-
-- **How do you keep a CI gate from being ignored?**
-- **What is a breaking change in a GraphQL schema, precisely?**
-
-## What this deliberately is *not*
-
-- Not a schema registry. It is one gate, done properly.
-
-
-## Run it now
+Requires Node 22.18+ (Node 24 recommended). TypeScript runs through Node's built-in type stripping, so there is no build step and no dependencies to install.
 
 ```bash
-npm test        # runs the suite; no install step needed
-npm run demo    # the 60-second artefact
-```
-
-Requires Node 22.6+ (24 recommended). TypeScript runs natively via
-type stripping - there is no build step and no `node_modules`.
-
-## Getting started
-
-```bash
-git clone <your-fork-url> schemadrift
+git clone https://github.com/SlateGitOrg/schemadrift.git
 cd schemadrift
-npm install
-npm run build
-npx schemadrift diff --old fixtures/a.graphql --new fixtures/b.graphql \
-  --usage fixtures/usage.jsonl
+npm run demo
 npm test
 ```
 
-Docker is supported but optional — every path above works on a plain
-Windows/macOS/Linux laptop without a cloud account.
+On Node 22.6 to 22.17, set `NODE_OPTIONS=--experimental-strip-types` before running either command.
 
-## Definition of done
+## Example
 
-- [ ] The differentiator above is implemented, and a test proves it
-- [ ] The measurable outcome is produced by a command anyone can run
-- [ ] `README` explains the one decision a generic version gets wrong
-- [ ] CI runs the full suite on every push and is green on `main`
-- [ ] A recruiter can see the headline artefact in under 60 seconds
+`npm run demo` judges one schema change twice, first on structure alone and then with usage evidence (output trimmed):
 
-## Licence
+```text
+  structure only:  BREAKING  (2 breaking)
+  with usage:      SAFE  (0 breaking)
+
+  field                 structural   with usage   why
+  User.nickname         BREAKING     SAFE         deprecated + 0 calls in 30d
+  User.avatarUrl        BREAKING     SAFE         deprecated + 0 calls in 30d
+
+    **SAFE** (3)
+
+    - [o] `User.nickname` - FIELD_REMOVED _(was BREAKING: deprecated, and zero calls from any client in the last 30 days)_
+```
+
+Programmatic use:
+
+```ts
+import { parseSchema, structuralDiff } from './src/diff.ts';
+import { buildWindow, applyUsage, worstSeverity, renderReport } from './src/usage.ts';
+
+const oldS = parseSchema(oldSdl);
+const changes = structuralDiff(oldS, parseSchema(newSdl));
+const final = applyUsage(changes, oldS, buildWindow(records, Date.now(), 30));
+console.log(worstSeverity(final), renderReport(final));
+```
+
+## How it works
+
+- **Parsing.** A dependency-free parser handles `type`, `input`, `enum` and `interface` bodies. Newlines, commas and whitespace all separate fields, and argument lists are masked first so their colons are not read as fields.
+- **Structural rules.** Removed types and fields and changed field types are BREAKING. An output field becoming non-null is SAFE, while an input field becoming required (or a new required input field) is BREAKING. Added arguments are DANGEROUS.
+- **Usage rule.** A BREAKING `FIELD_REMOVED` with callers stays BREAKING and lists them. With no callers and no prior `@deprecated`, it stays BREAKING with an explanation, since clients had no warning. With no callers and a prior `@deprecated`, it becomes SAFE with the reason attached.
+
+## Testing
+
+```bash
+npm test
+```
+
+`tests/severity.test.ts` covers the parser, the downgrade rule (including severity changing as the usage window empties and a single remaining caller blocking a downgrade), structural edge cases, and the report. `site/core.test.mjs` tests the browser logic, and CI also runs `scripts/validate_site.py`.
+
+## Project layout
+
+```text
+src/diff.ts          SDL parser and structural diff
+src/usage.ts         usage window, downgrade rule, report
+src/demo.ts          runnable example
+tests/               severity tests
+site/                browser app (GitHub Pages)
+docs/ARCHITECTURE.md design notes
+```
+
+## Limitations
+
+- The parser covers a subset of SDL; unions, scalars, directive definitions and `extend` blocks are not modeled.
+- It is a library plus demo, not a CLI or GitHub Action; usage records must be supplied by the caller.
+- Zero recorded calls is only as trustworthy as the telemetry behind it.
+
+## License
 
 MIT — see [LICENSE](LICENSE).

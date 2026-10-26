@@ -57,7 +57,7 @@ describe('the parser', () => {
 });
 
 describe('usage-aware severity', () => {
-  test('THE DIFFERENTIATOR: a deprecated field with zero callers is SAFE', () => {
+  test('a deprecated field with zero callers is SAFE', () => {
     const { changes } = diffWith([]);
     const c = changes.find((x) => x.path === 'User.nickname')!;
     assert.equal(c.severity, 'SAFE');
